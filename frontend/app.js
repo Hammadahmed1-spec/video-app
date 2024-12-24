@@ -1,5 +1,6 @@
 document.addEventListener('DOMContentLoaded', function () {
-  const apiEndpoint = 'video-backend-xyz-gyarggbebrezg2bk.ukwest-01.azurewebsites.net';
+  const apiEndpoint = 'https://video-backend-xyz-gyarggbebrezg2bk.ukwest-01.azurewebsites.net';
+
 
 
   let loggedInUser = null; // Store logged-in user data
