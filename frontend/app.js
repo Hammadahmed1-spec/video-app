@@ -1,7 +1,5 @@
 document.addEventListener('DOMContentLoaded', function () {
-  const apiEndpoint = 'https://video-backend-xyz-gyarggbebrezg2bk.ukwest-01.azurewebsites.net';
-
-
+  const apiEndpoint = 'https://video-backend-xyz-gyarggbebrezg2bk.ukwest-01.azurewebsites.net'; // Updated API URL
 
   let loggedInUser = null; // Store logged-in user data
 
@@ -61,10 +59,13 @@ document.addEventListener('DOMContentLoaded', function () {
   // Handle Sign Up Form Submission
   document.getElementById('signup-form').addEventListener('submit', function (event) {
     event.preventDefault();
+    console.log("Form submitted");  // Check if the form is being submitted
+
     const username = document.getElementById('signup-username').value;
     const password = document.getElementById('signup-password').value;
     const role = document.getElementById('user-role').value;
 
+    // Sending the signup request to the backend
     fetch(`${apiEndpoint}/signup`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -72,6 +73,7 @@ document.addEventListener('DOMContentLoaded', function () {
     })
       .then(response => response.json())
       .then(data => {
+        console.log(data);  // Check what data is returned
         if (data.success) {
           alert('Sign up successful! Please log in.');
           document.getElementById('signup-modal').style.display = 'none';
@@ -79,7 +81,10 @@ document.addEventListener('DOMContentLoaded', function () {
           alert(data.message || 'Error during sign up.');
         }
       })
-      .catch(error => console.error('Signup Error:', error));
+      .catch(error => {
+        console.error('Signup Error:', error);
+        alert('Failed to sign up.');
+      });
   });
 
   // Update header with login status and show upload form for creators
