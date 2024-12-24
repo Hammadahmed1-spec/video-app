@@ -6,20 +6,26 @@ from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
+from azure.storage.blob import BlobServiceClient
 
 # App configuration
 app = Flask(__name__)
 
-# Azure SQL Database connection URI
-app.config['SQLALCHEMY_DATABASE_URI'] = 'mssql+pyodbc://<username>:<password>@<servername>.database.windows.net/<databasename>?driver=ODBC+Driver+17+for+SQL+Server'
+# Azure SQL Database connection URI (replace with actual values)
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('SQLALCHEMY_DATABASE_URI')  # Use environment variable for security
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = 'your_secret_key'  # Set a secret key for JWT
-app.config['UPLOAD_FOLDER'] = 'uploads/'  # Folder to store uploaded videos
+app.config['UPLOAD_FOLDER'] = 'uploads/'  # Folder to store uploaded videos (or use Azure Blob Storage instead)
 app.config['ALLOWED_EXTENSIONS'] = {'mp4', 'avi', 'mov', 'mkv'}  # Allowed video formats
 
 # Initialize the database
 db = SQLAlchemy(app)
 CORS(app)
+
+# Azure Blob Storage Configuration (replace with actual values)
+blob_service_client = BlobServiceClient.from_connection_string(os.getenv('AZURE_BLOB_CONNECTION_STRING'))
+container_name = os.getenv('AZURE_BLOB_CONTAINER_NAME')
+container_client = blob_service_client.get_container_client(container_name)
 
 # Models for User and Video
 class User(db.Model):
@@ -123,25 +129,30 @@ def upload_video(current_user):
     if current_user.role != 'creator':
         return jsonify({'message': 'Permission denied! You need to be a creator to upload videos.'}), 403
 
-    # Handle video file upload
+    # Handle video file upload to Azure Blob Storage
     video_file = request.files['video']
     if video_file and allowed_file(video_file.filename):
         filename = secure_filename(video_file.filename)
-        video_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        video_file.save(video_path)
+        video_url = upload_video_to_blob(video_file, filename)  # Upload video to blob storage
 
         # Generate thumbnail
-        thumbnail = generate_thumbnail(video_path)
+        thumbnail = generate_thumbnail(video_url)
 
         # Save video info to database
         video = Video(title=request.form['title'], description=request.form['description'], 
-                      thumbnail=thumbnail, video_path=video_path, hashtags=request.form['hashtags'])
+                      thumbnail=thumbnail, video_path=video_url, hashtags=request.form['hashtags'])
         db.session.add(video)
         db.session.commit()
 
         return jsonify({'message': 'Video uploaded successfully!'})
 
     return jsonify({'message': 'Invalid file format.'}), 400
+
+# Helper function to upload video to Azure Blob Storage
+def upload_video_to_blob(file, filename):
+    blob_client = container_client.get_blob_client(filename)
+    blob_client.upload_blob(file, overwrite=True)
+    return f"https://{os.getenv('AZURE_BLOB_ACCOUNT_NAME')}.blob.core.windows.net/{container_name}/{filename}"
 
 # Route for searching videos (Now from the DB instead of Elasticsearch)
 @app.route('/search', methods=['GET'])
@@ -168,11 +179,10 @@ def index():
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
-def generate_thumbnail(video_path):
-    thumbnail_path = video_path + '.jpg'
-    command = f"ffmpeg -i {video_path} -ss 00:00:01.000 -vframes 1 {thumbnail_path}"
-    os.system(command)  # In production, consider using a background task system (e.g., Celery)
-    return thumbnail_path
+def generate_thumbnail(video_url):
+    # Dummy thumbnail generation function (adjust this to generate thumbnails from video)
+    thumbnail_url = video_url + '.jpg'  # Placeholder URL for thumbnail
+    return thumbnail_url
 
 # Run the app
 if __name__ == '__main__':
