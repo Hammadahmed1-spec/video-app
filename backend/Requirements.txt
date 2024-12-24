@@ -1,4 +1,6 @@
-Flask==2.2.2
-flask_sqlalchemy==2.5.1
-flask_cors==3.1.1
-pyjwt==2.4.0
+Flask==2.1.2
+Flask-CORS==3.1.1
+Flask-SQLAlchemy==2.5.1
+pyodbc==4.0.32
+azure-storage-blob==12.10.0
+jwt==1.7.1
