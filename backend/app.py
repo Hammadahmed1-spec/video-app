@@ -9,11 +9,13 @@ from werkzeug.utils import secure_filename
 
 # App configuration
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///videoapp.db'
+
+# Azure SQL Database connection URI
+app.config['SQLALCHEMY_DATABASE_URI'] = 'mssql+pyodbc://<username>:<password>@<servername>.database.windows.net/<databasename>?driver=ODBC+Driver+17+for+SQL+Server'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SECRET_KEY'] = 'your_secret_key'  # JWT Secret Key
-app.config['UPLOAD_FOLDER'] = 'uploads/'  # Folder for storing uploaded videos
-app.config['ALLOWED_EXTENSIONS'] = {'mp4', 'avi', 'mov', 'mkv'}  # Allowed file extensions
+app.config['SECRET_KEY'] = 'your_secret_key'  # Set a secret key for JWT
+app.config['UPLOAD_FOLDER'] = 'uploads/'  # Folder to store uploaded videos
+app.config['ALLOWED_EXTENSIONS'] = {'mp4', 'avi', 'mov', 'mkv'}  # Allowed video formats
 
 # Initialize the database
 db = SQLAlchemy(app)
@@ -34,6 +36,7 @@ class Video(db.Model):
     video_path = db.Column(db.String(100), nullable=False)
     hashtags = db.Column(db.String(100), nullable=True)
 
+    # Add to_dict method for JSON serialization
     def to_dict(self):
         return {
             "id": self.id,
@@ -86,7 +89,7 @@ def login():
     
     user = User.query.filter_by(username=username).first()
     
-    if user and user.password == password:
+    if user and user.password == password:  # Simplified, consider using hashed passwords in production
         token = generate_jwt(user)
         return jsonify({'success': True, 'token': token})
     else:
@@ -120,15 +123,19 @@ def upload_video(current_user):
     if current_user.role != 'creator':
         return jsonify({'message': 'Permission denied! You need to be a creator to upload videos.'}), 403
 
+    # Handle video file upload
     video_file = request.files['video']
     if video_file and allowed_file(video_file.filename):
         filename = secure_filename(video_file.filename)
         video_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         video_file.save(video_path)
 
-        # Save video info to the database
+        # Generate thumbnail
+        thumbnail = generate_thumbnail(video_path)
+
+        # Save video info to database
         video = Video(title=request.form['title'], description=request.form['description'], 
-                      thumbnail="default_thumbnail.jpg", video_path=video_path, hashtags=request.form['hashtags'])
+                      thumbnail=thumbnail, video_path=video_path, hashtags=request.form['hashtags'])
         db.session.add(video)
         db.session.commit()
 
@@ -136,7 +143,7 @@ def upload_video(current_user):
 
     return jsonify({'message': 'Invalid file format.'}), 400
 
-# Route for searching videos
+# Route for searching videos (Now from the DB instead of Elasticsearch)
 @app.route('/search', methods=['GET'])
 def search_videos():
     query = request.args.get('q')
@@ -145,6 +152,7 @@ def search_videos():
         Video.description.like(f'%{query}%') |
         Video.hashtags.like(f'%{query}%')
     ).all()
+    
     return jsonify([video.to_dict() for video in videos])
 
 @app.route('/videos', methods=['GET'])
@@ -159,6 +167,12 @@ def index():
 # Helper functions for video upload
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
+
+def generate_thumbnail(video_path):
+    thumbnail_path = video_path + '.jpg'
+    command = f"ffmpeg -i {video_path} -ss 00:00:01.000 -vframes 1 {thumbnail_path}"
+    os.system(command)  # In production, consider using a background task system (e.g., Celery)
+    return thumbnail_path
 
 # Run the app
 if __name__ == '__main__':
